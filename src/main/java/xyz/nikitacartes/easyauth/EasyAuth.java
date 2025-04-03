@@ -48,12 +48,15 @@ public class EasyAuth implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        // 获取游戏目录
         gameDirectory = FabricLoader.getInstance().getGameDir();
         LogInfo("EasyAuth mod by NikitaCartes");
 
         try {
+            // 加载服务器属性文件
             serverProp.load(new FileReader(gameDirectory + "/server.properties"));
             if (Boolean.parseBoolean(serverProp.getProperty("enforce-secure-profile"))) {
+                // 提示用户禁用 enforce-secure-profile 以允许离线玩家加入
                 LogWarn("Disable enforce-secure-profile to allow offline players to join the server");
                 LogWarn("For more info, see https://github.com/NikitaCartes/EasyAuth/issues/68");
             }
@@ -61,6 +64,7 @@ public class EasyAuth implements ModInitializer {
             LogError("Error while reading server properties: ", e);
         }
 
+        // 检查并创建配置目录
         File file = new File(gameDirectory + "/config/EasyAuth");
         if (!file.exists()) {
             if (!file.mkdirs()) {
@@ -69,8 +73,10 @@ public class EasyAuth implements ModInitializer {
             ConfigMigration.migrateFromV0();
         }
 
+        // 加载配置文件
         loadConfigs();
 
+        // 根据配置选择数据库类型
         if (EasyAuth.storageConfig.databaseType.equalsIgnoreCase("mysql")) {
             DB = new MySQL(EasyAuth.storageConfig);
         } else if (EasyAuth.storageConfig.databaseType.equalsIgnoreCase("mongodb")) {
@@ -79,12 +85,13 @@ public class EasyAuth implements ModInitializer {
             DB = new SQLite(EasyAuth.storageConfig);
         }
         try {
+            // 连接数据库
             DB.connect();
         } catch (DBApiException e) {
             LogError("Error while set up database connection", e);
         }
 
-        // Registering the commands
+        // 注册命令
         CommandRegistrationCallback.EVENT.register((dispatcher, dedicated, environment) -> {
             RegisterCommand.registerCommand(dispatcher);
             LoginCommand.registerCommand(dispatcher);
@@ -93,7 +100,7 @@ public class EasyAuth implements ModInitializer {
             AccountCommand.registerCommand(dispatcher);
         });
 
-        // From Fabric API
+        // 注册事件处理器
         PlayerBlockBreakEvents.BEFORE.register((world, player, blockPos, blockState, blockEntity) -> AuthEventHandler.onBreakBlock(player));
         UseBlockCallback.EVENT.register((player, world, hand, blockHitResult) -> AuthEventHandler.onUseBlock(player));
         UseItemCallback.EVENT.register((player, world, hand) -> AuthEventHandler.onUseItem(player));
@@ -103,6 +110,7 @@ public class EasyAuth implements ModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(this::onStartServer);
         ServerLifecycleEvents.SERVER_STOPPED.register(this::onStopServer);
 
+        // 注册登录验证事件
         Identifier earlyPhase = Identifier.of("easyauth", "early");
         ServerLoginConnectionEvents.QUERY_START.addPhaseOrdering(earlyPhase, Event.DEFAULT_PHASE);
         ServerLoginConnectionEvents.QUERY_START.register(earlyPhase, AuthEventHandler::onPreLogin);

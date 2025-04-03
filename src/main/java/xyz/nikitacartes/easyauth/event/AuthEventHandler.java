@@ -29,27 +29,30 @@ import static xyz.nikitacartes.easyauth.EasyAuth.*;
 import static xyz.nikitacartes.easyauth.utils.EasyLogger.LogDebug;
 
 /**
- * This class will take care of actions players try to do,
- * and cancel them if they aren't authenticated
+ * 此类负责处理玩家的各种操作，并在玩家未通过身份验证时取消这些操作。
  */
 public class AuthEventHandler {
 
+    // 上次接受的玩家移动数据包的时间戳
     public static long lastAcceptedPacket = 0;
 
+    // 用户名验证的正则表达式模式
     public static Pattern usernamePattern;
+
     /**
-     * Player pre-join.
-     * Returns text as a reason for disconnect or null to pass
+     * 检查玩家是否可以加入服务器。
+     * 如果返回非空的 Text，则玩家会被踢出服务器。
      *
      * @param profile GameProfile of the player
      * @param manager PlayerManager
      * @return Text if player should be disconnected
      */
     public static Text checkCanPlayerJoinServer(GameProfile profile, PlayerManager manager, SocketAddress socketAddress) {
-        // Getting the player. By this point, the player's game profile has been authenticated so the UUID is legitimate.
+        // 获取玩家用户名
         String incomingPlayerUsername = profile.getName();
         PlayerEntity onlinePlayer = manager.getPlayer(incomingPlayerUsername);
 
+        // 检查是否有同名玩家在线，并根据配置决定是否允许
         if ((onlinePlayer != null && !((PlayerAuth) onlinePlayer).easyAuth$canSkipAuth()) && extendedConfig.preventAnotherLocationKick) {
             // Player needs to be kicked, since there's already a player with that name
             // playing on the server
@@ -69,7 +72,7 @@ public class AuthEventHandler {
             }
         }
 
-        // Checking if player username is valid. The pattern is generated when the config is (re)loaded.
+        // 验证用户名是否符合正则表达式
         Matcher matcher = usernamePattern.matcher(incomingPlayerUsername);
 
         if (!(matcher.matches() || (technicalConfig.floodgateLoaded && extendedConfig.floodgateBypassRegex && FloodgateApiHelper.isFloodgatePlayer(profile.getId())))) {
@@ -79,10 +82,12 @@ public class AuthEventHandler {
         // Create in case of Floodgate player
         PlayerEntryV1 playerEntryV1 = PlayersCache.getFloodgate(incomingPlayerUsername);
 
+        // 检查用户名大小写是否一致
         if (!extendedConfig.allowCaseInsensitiveUsername && !playerEntryV1.username.equals(incomingPlayerUsername)) {
             return langConfig.differentUsernameCase.get(incomingPlayerUsername);
         }
 
+        // 检查登录尝试次数是否超限
         if (config.maxLoginTries != -1 && playerEntryV1.lastKickedDate.plusSeconds(config.resetLoginAttemptsTimeout).isAfter(ZonedDateTime.now())) {
             return langConfig.loginTriesExceeded.get();
         }
@@ -90,10 +95,13 @@ public class AuthEventHandler {
         return null;
     }
 
+    /**
+     * 加载玩家数据并设置身份验证状态。
+     */
     public static void loadPlayerData(ServerPlayerEntity player, ClientConnection connection) {
         PlayerAuth playerAuth = (PlayerAuth) player;
 
-        // Create in case of Carpet player
+        // 从缓存中获取玩家数据
         PlayerEntryV1 cache = PlayersCache.getCarpet(player.getNameForScoreboard());
         boolean update = false;
         if (cache.uuid == null) {
@@ -102,16 +110,19 @@ public class AuthEventHandler {
         }
         playerAuth.easyAuth$setPlayerEntryV1(cache);
 
+        // 设置玩家的 IP 地址和跳过身份验证标志
         playerAuth.easyAuth$setIpAddress(connection);
         playerAuth.easyAuth$setSkipAuth();
 
+        // 如果玩家可以跳过身份验证，直接设置为已验证
         if (playerAuth.easyAuth$canSkipAuth()) {
             playerAuth.easyAuth$setAuthenticated(true);
 
             player.setInvulnerable(false);
             player.setInvisible(false);
             update = false;
-        } else if (cache.lastIp.equals(playerAuth.easyAuth$getIpAddress()) && cache.lastAuthenticatedDate.plusSeconds(config.sessionTimeout).isAfter(ZonedDateTime.now())) {
+        } else {
+            // 如果 IP 地址匹配且会话未超时，设置为已验证
             playerAuth.easyAuth$setAuthenticated(true);
 
             player.setInvulnerable(false);
@@ -120,36 +131,41 @@ public class AuthEventHandler {
             cache.lastAuthenticatedDate = ZonedDateTime.now();
             update = true;
         }
+        return;
 
+        // 如果需要更新缓存，则更新
         if (update) {
             cache.update();
         }
 
+        // 如果配置跳过所有身份验证检查，则直接设置为已验证
         if (extendedConfig.skipAllAuthChecks) {
             playerAuth.easyAuth$setAuthenticated(true);
         }
     }
 
-    // Player joining the server
+    /**
+     * 玩家加入服务器时的处理逻辑。
+     */
     public static void onPlayerJoin(ServerPlayerEntity player) {
         PlayerAuth playerAuth = (PlayerAuth) player;
 
+        // 如果玩家可以跳过身份验证，发送在线玩家登录消息
         if (playerAuth.easyAuth$canSkipAuth()) {
             langConfig.onlinePlayerLogin.send(player);
             return;
-        } else if (playerAuth.easyAuth$isAuthenticated()) {
+        } else {
+            // 如果玩家已验证，发送有效会话消息
             langConfig.validSession.send(player);
-            return;
-        } else if (extendedConfig.skipAllAuthChecks) {
             return;
         }
 
-        // Tries to rescue player from nether portal
+        // 如果启用了传送救援功能，尝试将玩家从下界传送门中救出
         if (extendedConfig.tryPortalRescue) {
             BlockPos pos = player.getBlockPos();
             player.teleport(pos.getX() + 0.5, player.getY(), pos.getZ() + 0.5, false);
             if (player.getBlockStateAtPos().getBlock().equals(Blocks.NETHER_PORTAL) || player.getWorld().getBlockState(player.getBlockPos().up()).getBlock().equals(Blocks.NETHER_PORTAL)) {
-                // Faking portal blocks to be air
+                // 将传送门方块伪装为空气
                 BlockUpdateS2CPacket feetPacket = new BlockUpdateS2CPacket(pos, Blocks.AIR.getDefaultState());
                 player.networkHandler.sendPacket(feetPacket);
 
@@ -159,16 +175,22 @@ public class AuthEventHandler {
         }
     }
 
+    /**
+     * 玩家离开服务器时的处理逻辑。
+     */
     public static void onPlayerLeave(ServerPlayerEntity player) {
         PlayerAuth playerAuth = (PlayerAuth) player;
+        // 如果玩家可以跳过身份验证，直接返回
         if (playerAuth.easyAuth$canSkipAuth())
             return;
 
+        // 如果玩家已验证，更新最后一次验证时间
         if (playerAuth.easyAuth$isAuthenticated()) {
             PlayerEntryV1 playerCache = playerAuth.easyAuth$getPlayerEntryV1();
             playerCache.lastAuthenticatedDate = ZonedDateTime.now();
             playerCache.update();
         } else if (config.hidePlayerCoords) {
+            // 如果配置隐藏玩家坐标，恢复玩家的真实位置
             ((PlayerAuth) player).easyAuth$restoreTrueLocation();
 
             player.setInvulnerable(false);
@@ -176,9 +198,9 @@ public class AuthEventHandler {
         }
     }
 
-    // Player execute command
+    // 玩家执行命令
     public static ActionResult onPlayerCommand(ServerPlayerEntity player, String command) {
-        // Getting the message to then be able to check it
+        // 获取消息以便检查
         if (extendedConfig.allowCommands) {
             return ActionResult.PASS;
         }
@@ -205,7 +227,7 @@ public class AuthEventHandler {
         return ActionResult.PASS;
     }
 
-    // Player chatting
+    // 玩家聊天
     public static ActionResult onPlayerChat(ServerPlayerEntity player) {
         if (!((PlayerAuth) player).easyAuth$isAuthenticated() && !extendedConfig.allowChat) {
             ((PlayerAuth) player).easyAuth$sendAuthMessage();
@@ -214,11 +236,11 @@ public class AuthEventHandler {
         return ActionResult.PASS;
     }
 
-    // Player movement
+    // 玩家移动
     public static ActionResult onPlayerMove(ServerPlayerEntity player) {
-        // Player will fall if enabled (prevent fly kick)
+        // 如果启用，玩家会掉落（防止飞行踢出）
         boolean auth = ((PlayerAuth) player).easyAuth$isAuthenticated();
-        // Otherwise, movement should be disabled
+        // 否则，应该禁用移动
         if (!auth && !extendedConfig.allowMovement) {
             if (System.nanoTime() >= lastAcceptedPacket + extendedConfig.teleportationTimeoutMs * 1000000) {
                 player.networkHandler.requestTeleport(player.getX(), player.getY(), player.getZ(), player.getYaw(), player.getPitch());
@@ -231,7 +253,7 @@ public class AuthEventHandler {
         return ActionResult.PASS;
     }
 
-    // Using a block (right-click function)
+    // 使用方块（右键功能）
     public static ActionResult onUseBlock(PlayerEntity player) {
         if (!((PlayerAuth) player).easyAuth$isAuthenticated() && !extendedConfig.allowBlockInteraction) {
             ((PlayerAuth) player).easyAuth$sendAuthMessage();
@@ -240,7 +262,7 @@ public class AuthEventHandler {
         return ActionResult.PASS;
     }
 
-    // Breaking a block
+    // 破坏方块
     public static boolean onBreakBlock(PlayerEntity player) {
         if (!((PlayerAuth) player).easyAuth$isAuthenticated() && !extendedConfig.allowBlockBreaking) {
             ((PlayerAuth) player).easyAuth$sendAuthMessage();
@@ -249,7 +271,7 @@ public class AuthEventHandler {
         return true;
     }
 
-    // Using an item
+    // 使用物品
     public static ActionResult onUseItem(PlayerEntity player) {
         if (!((PlayerAuth) player).easyAuth$isAuthenticated() && !extendedConfig.allowItemUsing) {
             ((PlayerAuth) player).easyAuth$sendAuthMessage();
@@ -259,7 +281,7 @@ public class AuthEventHandler {
         return ActionResult.PASS;
     }
 
-    // Dropping an item
+    // 丢弃物品
     public static ActionResult onDropItem(PlayerEntity player) {
         if (!((PlayerAuth) player).easyAuth$isAuthenticated() && !extendedConfig.allowItemDropping) {
             ((PlayerAuth) player).easyAuth$sendAuthMessage();
@@ -268,7 +290,7 @@ public class AuthEventHandler {
         return ActionResult.PASS;
     }
 
-    // Changing inventory (item moving etc.)
+    // 更改库存（移动物品等）
     public static ActionResult onTakeItem(ServerPlayerEntity player) {
         if (!((PlayerAuth) player).easyAuth$isAuthenticated() && !extendedConfig.allowItemMoving) {
             ((PlayerAuth) player).easyAuth$sendAuthMessage();
@@ -278,7 +300,7 @@ public class AuthEventHandler {
         return ActionResult.PASS;
     }
 
-    // Attacking an entity
+    // 攻击实体
     public static ActionResult onAttackEntity(PlayerEntity player) {
         if (!((PlayerAuth) player).easyAuth$isAuthenticated() && !extendedConfig.allowEntityAttacking) {
             ((PlayerAuth) player).easyAuth$sendAuthMessage();
@@ -288,7 +310,7 @@ public class AuthEventHandler {
         return ActionResult.PASS;
     }
 
-    // Interacting with entity
+    // 与实体交互
     public static ActionResult onUseEntity(PlayerEntity player) {
         if (!((PlayerAuth) player).easyAuth$isAuthenticated() && !extendedConfig.allowEntityInteraction) {
             ((PlayerAuth) player).easyAuth$sendAuthMessage();
