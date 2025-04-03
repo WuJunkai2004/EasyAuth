@@ -131,7 +131,6 @@ public class AuthEventHandler {
             cache.lastAuthenticatedDate = ZonedDateTime.now();
             update = true;
         }
-        return;
 
         // 如果需要更新缓存，则更新
         if (update) {
@@ -158,20 +157,6 @@ public class AuthEventHandler {
             // 如果玩家已验证，发送有效会话消息
             langConfig.validSession.send(player);
             return;
-        }
-
-        // 如果启用了传送救援功能，尝试将玩家从下界传送门中救出
-        if (extendedConfig.tryPortalRescue) {
-            BlockPos pos = player.getBlockPos();
-            player.teleport(pos.getX() + 0.5, player.getY(), pos.getZ() + 0.5, false);
-            if (player.getBlockStateAtPos().getBlock().equals(Blocks.NETHER_PORTAL) || player.getWorld().getBlockState(player.getBlockPos().up()).getBlock().equals(Blocks.NETHER_PORTAL)) {
-                // 将传送门方块伪装为空气
-                BlockUpdateS2CPacket feetPacket = new BlockUpdateS2CPacket(pos, Blocks.AIR.getDefaultState());
-                player.networkHandler.sendPacket(feetPacket);
-
-                BlockUpdateS2CPacket headPacket = new BlockUpdateS2CPacket(pos.up(), Blocks.AIR.getDefaultState());
-                player.networkHandler.sendPacket(headPacket);
-            }
         }
     }
 
