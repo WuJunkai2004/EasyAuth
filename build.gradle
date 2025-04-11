@@ -53,19 +53,7 @@ dependencies {
     include implementation("at.favre.lib:bytes:${bytes_version}")
 
     // Storage
-    // LevelDB database
-    include implementation("org.iq80.leveldb:leveldb:${leveldb_version}")
-    include implementation("org.iq80.leveldb:leveldb-api:${leveldb_version}")
-
-    // MongoDB driver
-    include implementation("org.mongodb:mongodb-driver-sync:${mongodb_version}")
-    include implementation("org.mongodb:mongodb-driver-core:${mongodb_version}")
-    include implementation("org.mongodb:bson:${mongodb_version}")
-
-    // MySQL driver
-    include implementation ("com.mysql:mysql-connector-j:${mysql_version}")
-
-    // SQLite driver
+    // SQLite driver (only keep this)
     include implementation("org.xerial:sqlite-jdbc:${sqlite_version}")
 
     // Hocon config
