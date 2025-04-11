@@ -26,18 +26,18 @@ public class SQLite implements DbApi {
     @Override
     public void connect() throws DBApiException {
         try {
-            // Load the SQLite JDBC driver
+            // 加载SQLite JDBC驱动
             Class.forName("org.sqlite.JDBC");
 
-            // Connect to the database file
+            // 连接到数据库文件
             File dbFile = new File(EasyAuth.gameDirectory + "/" + config.sqlite.sqlitePath);
             if (!dbFile.getParentFile().exists() && !dbFile.getParentFile().mkdirs()) {
-                throw new DBApiException("Failed to create directory for SQLite database", null);
+                throw new DBApiException("无法为SQLite数据库创建目录", null);
             }
             String url = "jdbc:sqlite:" + dbFile.getAbsolutePath();
             connection = DriverManager.getConnection(url);
 
-            // Create tables if they don't exist
+            // 如果表不存在，则创建表
             Statement statement = connection.createStatement();
             statement.executeUpdate(
                     """
@@ -52,9 +52,9 @@ public class SQLite implements DbApi {
             );
             statement.close();
 
-            LogDebug("Connected to SQLite database successfully.");
+            LogDebug("成功连接到SQLite数据库。");
         } catch (ClassNotFoundException | SQLException e) {
-            throw new DBApiException("Failed setting up SQLite DB", e);
+            throw new DBApiException("设置SQLite数据库失败", e);
         }
     }
 
@@ -64,10 +64,10 @@ public class SQLite implements DbApi {
             if (connection != null) {
                 connection.close();
                 connection = null;
-                LogInfo("SQLite database connection closed successfully.");
+                LogInfo("成功关闭SQLite数据库连接。");
             }
         } catch (SQLException e) {
-            LogError("Error closing SQLite database connection", e);
+            LogError("关闭SQLite数据库连接时出错", e);
         }
     }
 
@@ -79,6 +79,7 @@ public class SQLite implements DbApi {
     @Override
     public void registerUser(PlayerEntryV1 data) {
         try {
+            // 插入用户数据到数据库
             PreparedStatement statement = connection.prepareStatement("INSERT INTO " + config.sqlite.sqliteTable + " (username, username_lower, uuid, data) VALUES (?, ?, ?, ?);");
             statement.setString(1, data.username);
             statement.setString(2, data.usernameLowerCase);
@@ -87,7 +88,7 @@ public class SQLite implements DbApi {
             statement.executeUpdate();
             statement.close();
         } catch (SQLException e) {
-            LogError("Error registering user in SQLite database: " + data, e);
+            LogError("在SQLite数据库中注册用户时出错: " + data, e);
         }
     }
 
@@ -95,6 +96,7 @@ public class SQLite implements DbApi {
     public @Nullable PlayerEntryV1 getUserData(String username) {
         try {
             PreparedStatement statement;
+            // 根据配置决定是否区分大小写查询用户名
             if (extendedConfig.allowCaseInsensitiveUsername) {
                 statement = connection.prepareStatement("SELECT username, username_lower, uuid, data FROM " + config.sqlite.sqliteTable + " WHERE username = ?;");
                 statement.setString(1, username);
@@ -105,12 +107,14 @@ public class SQLite implements DbApi {
             ResultSet resultSet = statement.executeQuery();
             PlayerEntryV1 playerEntry = null;
 
+            // 如果找到匹配的用户数据，创建PlayerEntryV1对象
             if (resultSet.next()) {
                 playerEntry = new PlayerEntryV1(resultSet.getString("username"),
                                                 resultSet.getString("username_lower"),
                                                 resultSet.getString("uuid"),
                                                 resultSet.getString("data"));
             }
+            // 检查是否有完全匹配的用户名
             while (resultSet.next()) {
                 String dbUsername = resultSet.getString("username");
                 if (dbUsername.equals(username)) {
@@ -126,12 +130,13 @@ public class SQLite implements DbApi {
             statement.close();
             return playerEntry;
         } catch (SQLException e) {
-            LogError("Error checking user registration in SQLite database", e);
+            LogError("在SQLite数据库中检查用户注册时出错", e);
         }
         return null;
     }
 
     public @Nonnull PlayerEntryV1 getUserDataOrCreate(String username) {
+        // 获取用户数据，如果不存在则创建新用户
         PlayerEntryV1 playerEntry = getUserData(username);
         if (playerEntry == null) {
             playerEntry = new PlayerEntryV1(username);
@@ -143,18 +148,20 @@ public class SQLite implements DbApi {
     @Override
     public void deleteUserData(String username) {
         try {
+            // 从数据库中删除用户数据
             PreparedStatement statement = connection.prepareStatement("DELETE FROM " + config.sqlite.sqliteTable + " WHERE username = ?;");
             statement.setString(1, username);
             statement.executeUpdate();
             statement.close();
         } catch (SQLException e) {
-            LogError("Error deleting user data in SQLite database", e);
+            LogError("在SQLite数据库中删除用户数据时出错", e);
         }
     }
 
     @Override
     public void updateUserData(PlayerEntryV1 data) {
         try {
+            // 更新用户数据
             PreparedStatement statement = connection.prepareStatement("UPDATE " + config.sqlite.sqliteTable + " SET uuid = ?, data = ? WHERE username = ?;");
             statement.setObject(1, data.uuid);
             statement.setString(2, data.toJson());
@@ -162,7 +169,7 @@ public class SQLite implements DbApi {
             statement.executeUpdate();
             statement.close();
         } catch (SQLException e) {
-            LogError("Error updating user data in SQLite database: " + data, e);
+            LogError("在SQLite数据库中更新用户数据时出错: " + data, e);
         }
     }
 
@@ -170,6 +177,7 @@ public class SQLite implements DbApi {
     public HashMap<String, PlayerEntryV1> getAllData() {
         HashMap<String, PlayerEntryV1> registeredPlayers = new HashMap<>();
         try {
+            // 获取所有用户数据
             Statement statement = connection.createStatement();
             ResultSet resultSet = statement.executeQuery("SELECT * FROM " + config.sqlite.sqliteTable + ";");
             while (resultSet.next()) {
@@ -189,39 +197,7 @@ public class SQLite implements DbApi {
 
     @Override
     public void migrateFromV1(HashMap<String, String> userCache) {
-        try {
-            PreparedStatement preparedStatement = connection.prepareStatement("INSERT INTO " + config.sqlite.sqliteTable + " (username, username_lower, uuid, data) VALUES (?, ?, ?, ?);");
-            LevelDB levelDB = new LevelDB(EasyAuth.storageConfig);
-            levelDB.connect();
-            userCache.forEach((username, uuid) -> {
-                try {
-                    String data = levelDB.getPlayerCache0(uuid);
-                    if (data == null) {
-                        String lowerCaseUsername = username.toLowerCase(Locale.ENGLISH);
-                        String lowerCaseUuid = Uuids.getOfflinePlayerUuid(lowerCaseUsername).toString();
-                        data = levelDB.getPlayerCache0(lowerCaseUuid);
-                    }
-                    if (data != null) {
-                        PlayerEntryV1 playerEntry = migrateFromV1(data, username);
-                        preparedStatement.setString(1, playerEntry.username);
-                        preparedStatement.setString(2, playerEntry.usernameLowerCase);
-                        preparedStatement.setObject(3, playerEntry.uuid);
-                        preparedStatement.setString(4, playerEntry.toJson());
-                        preparedStatement.addBatch();
-                    }
-                } catch (SQLException e) {
-                    LogError("Error migrating players data", e);
-                }
-            });
-            preparedStatement.executeBatch();
-            preparedStatement.close();
-            levelDB.close();
-        } catch (SQLException e) {
-            LogError("Error migrating players data", e);
-        } catch (DBApiException e) {
-            LogError("Error migrating players data", e);
-            connection = null;
-            throw new RuntimeException(e);
-        }
+        LogInfo("Migrating from V1 to V2");
+        LogInfo("But it's not implemented yet");
     }
 }

@@ -131,15 +131,10 @@ public class ConfigMigration {
         long now = System.currentTimeMillis();
 
         DbApi db;
-        if (EasyAuth.storageConfig.databaseType.equalsIgnoreCase("mysql")) {
-            db = new MySQL(EasyAuth.storageConfig);
-        } else if (EasyAuth.storageConfig.databaseType.equalsIgnoreCase("mongodb")) {
-            db = new MongoDB(EasyAuth.storageConfig);
-        } else {
-            EasyAuth.storageConfig.databaseType = "sqlite";
 
-            db = new SQLite(EasyAuth.storageConfig);
-        }
+        EasyAuth.storageConfig.databaseType = "sqlite";
+
+        db = new SQLite(EasyAuth.storageConfig);
         try {
             db.connect();
         } catch (DBApiException e) {
