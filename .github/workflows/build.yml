@@ -32,7 +32,7 @@ jobs:
             ${{ runner.os }}-easyauth-
 
       - name: Build
-        run: ./gradlew build
+        run: ./gradlew build --refresh-dependencies
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

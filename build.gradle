@@ -28,7 +28,7 @@ loom {
 
 dependencies {
     // fix nullable
-    implementation "javax.annotation:javax.annotation-api:1.3.2"
+    include implementation("javax.annotation:javax.annotation-api:1.3.2")
 
     // Fabric
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -146,4 +146,8 @@ curseforge {
 tasks.register("publish") {
     dependsOn("modrinth")
     dependsOn("curseforge")
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.compilerArgs += ["--add-modules", "java.annotation"]
 }
