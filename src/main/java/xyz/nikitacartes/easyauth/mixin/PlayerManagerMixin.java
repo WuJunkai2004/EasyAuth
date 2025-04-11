@@ -51,12 +51,14 @@ public abstract class PlayerManagerMixin {
 
     @Inject(method = "onPlayerConnect(Lnet/minecraft/network/ClientConnection;Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/minecraft/server/network/ConnectedClientData;)V", at = @At("HEAD"))
     private void onPlayerConnectHead(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
+        // 加载玩家数据
         AuthEventHandler.loadPlayerData(player, connection);
     }
 
     @ModifyVariable(method = "onPlayerConnect(Lnet/minecraft/network/ClientConnection;Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/minecraft/server/network/ConnectedClientData;)V",
             at = @At("STORE"), ordinal = 0)
     private RegistryKey<World> onPlayerConnect(RegistryKey<World> world, ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData) {
+        // 如果玩家未认证且配置隐藏坐标，则将玩家传送到默认世界的出生点
         if (config.hidePlayerCoords && !((PlayerAuth) player).easyAuth$isAuthenticated()) {
             ((PlayerAuth) player).easyAuth$saveTrueDimension(world);
             return RegistryKey.of(RegistryKeys.WORLD, Identifier.of(config.worldSpawn.dimension));
@@ -67,6 +69,7 @@ public abstract class PlayerManagerMixin {
     @ModifyArgs(method = "onPlayerConnect(Lnet/minecraft/network/ClientConnection;Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/minecraft/server/network/ConnectedClientData;)V",
             at = @At(value = "INVOKE", target = "Lnet/minecraft/server/network/ServerPlayNetworkHandler;requestTeleport(DDDFF)V"))
     private void onPlayerConnect(Args args, ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData) {
+        // 如果玩家未认证且配置隐藏坐标，则设置传送目标为默认出生点
         if (config.hidePlayerCoords && !((PlayerAuth) player).easyAuth$isAuthenticated()) {
             ((PlayerAuth) player).easyAuth$saveTrueLocation();
 
@@ -96,12 +99,14 @@ public abstract class PlayerManagerMixin {
 
     @Inject(method = "onPlayerConnect(Lnet/minecraft/network/ClientConnection;Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/minecraft/server/network/ConnectedClientData;)V", at = @At("RETURN"))
     private void onPlayerConnectReturn(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
+        // 处理玩家加入事件
         AuthEventHandler.onPlayerJoin(player);
     }
 
     @Redirect(method = "respawnPlayer",
     at = @At(value = "INVOKE", target = "Lnet/minecraft/server/network/ServerPlayerEntity;getRespawnTarget(ZLnet/minecraft/world/TeleportTarget$PostDimensionTransition;)Lnet/minecraft/world/TeleportTarget;"))
     private TeleportTarget replaceRespawnTarget(ServerPlayerEntity player, boolean alive, TeleportTarget.PostDimensionTransition postDimensionTransition) {
+        // 如果玩家未认证且配置隐藏坐标，则将重生点设置为默认出生点
         if (alive && config.hidePlayerCoords && !((PlayerAuth) player).easyAuth$isAuthenticated()) {
             return new TeleportTarget(
                 this.server.getWorld(RegistryKey.of(RegistryKeys.WORLD, Identifier.of(config.worldSpawn.dimension))),
@@ -114,16 +119,17 @@ public abstract class PlayerManagerMixin {
 
     @Inject(method = "remove(Lnet/minecraft/server/network/ServerPlayerEntity;)V", at = @At("HEAD"))
     private void onPlayerLeave(ServerPlayerEntity serverPlayerEntity, CallbackInfo ci) {
+        // 处理玩家离开事件
         AuthEventHandler.onPlayerLeave(serverPlayerEntity);
     }
 
     @Inject(method = "checkCanJoin(Ljava/net/SocketAddress;Lcom/mojang/authlib/GameProfile;)Lnet/minecraft/text/Text;", at = @At("HEAD"), cancellable = true)
     private void checkCanJoin(SocketAddress socketAddress, GameProfile profile, CallbackInfoReturnable<Text> cir) {
-        // Getting the player that is trying to join the server
+        // 检查玩家是否可以加入服务器
         Text returnText = AuthEventHandler.checkCanPlayerJoinServer(profile, playerManager, socketAddress);
 
         if (returnText != null) {
-            // Canceling player joining with the returnText message
+            // 如果返回消息不为空，则取消玩家加入并显示消息
             cir.setReturnValue(returnText);
         }
     }
@@ -135,6 +141,7 @@ public abstract class PlayerManagerMixin {
             )
     )
     private void migrateOfflineStats(PlayerEntity player, CallbackInfoReturnable<ServerStatHandler> cir, @Local UUID uUID, @Local ServerStatHandler serverStatHandler, @Local(ordinal = 0) File serverStatsDir) {
+        // 如果玩家从离线模式切换到在线模式，则迁移统计数据文件
         File onlineFile = new File(serverStatsDir, uUID + ".json");
         if (server.isOnlineMode() && !extendedConfig.forcedOfflineUuid && ((PlayerAuth) player).easyAuth$isUsingMojangAccount() && !onlineFile.exists()) {
             String playername = player.getGameProfile().getName();

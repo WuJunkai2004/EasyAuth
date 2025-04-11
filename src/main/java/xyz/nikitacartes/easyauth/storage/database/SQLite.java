@@ -81,10 +81,10 @@ public class SQLite implements DbApi {
         try {
             // 插入用户数据到数据库
             PreparedStatement statement = connection.prepareStatement("INSERT INTO " + config.sqlite.sqliteTable + " (username, username_lower, uuid, data) VALUES (?, ?, ?, ?);");
-            statement.setString(1, data.username);
-            statement.setString(2, data.usernameLowerCase);
-            statement.setObject(3, data.uuid);
-            statement.setString(4, data.toJson());
+            statement.setString(1, data.username); // 设置用户名
+            statement.setString(2, data.usernameLowerCase); // 设置小写用户名
+            statement.setObject(3, data.uuid); // 设置UUID
+            statement.setString(4, data.toJson()); // 设置用户数据的JSON表示
             statement.executeUpdate();
             statement.close();
         } catch (SQLException e) {
@@ -139,8 +139,8 @@ public class SQLite implements DbApi {
         // 获取用户数据，如果不存在则创建新用户
         PlayerEntryV1 playerEntry = getUserData(username);
         if (playerEntry == null) {
-            playerEntry = new PlayerEntryV1(username);
-            registerUser(playerEntry);
+            playerEntry = new PlayerEntryV1(username); // 创建新用户
+            registerUser(playerEntry); // 注册新用户
         }
         return playerEntry;
     }
@@ -150,7 +150,7 @@ public class SQLite implements DbApi {
         try {
             // 从数据库中删除用户数据
             PreparedStatement statement = connection.prepareStatement("DELETE FROM " + config.sqlite.sqliteTable + " WHERE username = ?;");
-            statement.setString(1, username);
+            statement.setString(1, username); // 设置要删除的用户名
             statement.executeUpdate();
             statement.close();
         } catch (SQLException e) {
@@ -163,9 +163,9 @@ public class SQLite implements DbApi {
         try {
             // 更新用户数据
             PreparedStatement statement = connection.prepareStatement("UPDATE " + config.sqlite.sqliteTable + " SET uuid = ?, data = ? WHERE username = ?;");
-            statement.setObject(1, data.uuid);
-            statement.setString(2, data.toJson());
-            statement.setString(3, data.username);
+            statement.setObject(1, data.uuid); // 更新UUID
+            statement.setString(2, data.toJson()); // 更新用户数据的JSON表示
+            statement.setString(3, data.username); // 设置用户名
             statement.executeUpdate();
             statement.close();
         } catch (SQLException e) {
@@ -185,7 +185,7 @@ public class SQLite implements DbApi {
                 String usernameLowerCase = resultSet.getString("username_lower");
                 String uuid = resultSet.getString("uuid");
                 String data = resultSet.getString("data");
-                registeredPlayers.put(username, new PlayerEntryV1(username, usernameLowerCase, uuid, data));
+                registeredPlayers.put(username, new PlayerEntryV1(username, usernameLowerCase, uuid, data)); // 将用户数据存入HashMap
             }
             resultSet.close();
             statement.close();

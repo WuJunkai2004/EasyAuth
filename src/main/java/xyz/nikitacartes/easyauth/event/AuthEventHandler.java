@@ -47,9 +47,14 @@ public class AuthEventHandler {
      * @return 如果玩家应被断开连接，则返回文本
      */
     public static Text checkCanPlayerJoinServer(GameProfile profile, PlayerManager manager, SocketAddress socketAddress) {
-        // 获取玩家。在此时，玩家的游戏档案已通过身份验证，因此 UUID 是合法的。
+        // 获取玩家。在此时，玩家的游戏档案已通过身份验证
         String incomingPlayerUsername = profile.getName();
         PlayerEntity onlinePlayer = manager.getPlayer(incomingPlayerUsername);
+
+        // 如果没有 uuid, 分配一个
+        if(onlinePlayer.uuid == null) {
+            onlinePlayer.uuid = Uuids.getOfflinePlayerProfile(profile.getName());
+        }
 
         // 检查是否有同名玩家在线，如果有且 IP 不同，则踢出玩家
         if ((onlinePlayer != null && !((PlayerAuth) onlinePlayer).easyAuth$canSkipAuth()) && extendedConfig.preventAnotherLocationKick) {
